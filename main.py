@@ -1,7 +1,7 @@
-import sqlite3
 import tempfile
 from pathlib import Path
 
+import aiosqlite
 from fastmcp import FastMCP
 
 # Use temporary directory which should be writable
@@ -13,9 +13,10 @@ print(f"Database path: {DB_PATH}")
 
 mcp = FastMCP("ExpenseTracker")
 
-def init_db():
+def init_db(): # Keep as sync for initialization
     try:
-        # Create database with explicit write permissions
+        # Use synchronous sqlite3 just for initialization
+        import sqlite3
         with sqlite3.connect(DB_PATH) as c:
             c.execute("PRAGMA journal_mode=WAL")  # Better for concurrent access
             c.execute("""
@@ -35,28 +36,26 @@ def init_db():
 init_db()
 
 @mcp.tool()
-def add_expense(date, amount, category, subcategory="", note=""):
+async def add_expense(date, amount, category, subcategory="", note=""):
     '''Add a new expense entry to the database.'''
     try:
-        with sqlite3.connect(DB_PATH) as c:
-            cur = c.execute(
+        async with aiosqlite.connect(DB_PATH, timeout=10) as c:
+            cur = await c.execute(
                 "INSERT INTO expenses(date, amount, category, subcategory, note) VALUES (?,?,?,?,?)",
                 (date, amount, category, subcategory, note)
             )
             return {"status": "success", "id": cur.lastrowid, "message": "Expense added successfully"}
-    except sqlite3.OperationalError as e:
+    except Exception as e:
         if "readonly" in str(e).lower():
             return {"status": "error", "message": "Database is in read-only mode. Check file permissions."}
         return {"status": "error", "message": f"Database error: {e!s}"}
-    except Exception as e:
-        return {"status": "error", "message": f"Unexpected error: {e!s}"}
 
 @mcp.tool()
-def list_expenses(start_date, end_date):
+async def list_expenses(start_date, end_date):
     '''List expense entries within an inclusive date range.'''
     try:
-        with sqlite3.connect(DB_PATH) as c:
-            cur = c.execute(
+        async with aiosqlite.connect(DB_PATH) as c:
+            cur = await c.execute(
                 """
                 SELECT id, date, amount, category, subcategory, note
                 FROM expenses
@@ -66,15 +65,15 @@ def list_expenses(start_date, end_date):
                 (start_date, end_date)
             )
             cols = [d[0] for d in cur.description]
-            return [dict(zip(cols, r)) for r in cur.fetchall()]
+            return [dict(zip(cols, r)) for r in await cur.fetchall()]
     except Exception as e:
         return {"status": "error", "message": f"Error listing expenses: {e!s}"}
 
 @mcp.tool()
-def summarize(start_date, end_date, category=None):
+async def summarize(start_date, end_date, category=None):
     '''Summarize expenses by category within an inclusive date range.'''
     try:
-        with sqlite3.connect(DB_PATH) as c:
+        async with aiosqlite.connect(DB_PATH) as c:
             query = """
                 SELECT category, SUM(amount) AS total_amount, COUNT(*) as count
                 FROM expenses
@@ -89,9 +88,9 @@ def summarize(start_date, end_date, category=None):
 
             query += " GROUP BY category ORDER BY total_amount DESC"
 
-            cur = c.execute(query, params)
+            cur = await c.execute(query, params)
             cols = [d[0] for d in cur.description]
-            return [dict(zip(cols, r)) for r in cur.fetchall()]
+            return [dict(zip(cols, r)) for r in await cur.fetchall()]
     except Exception as e:
         return {"status": "error", "message": f"Error summarizing expenses: {e!s}"}
 
