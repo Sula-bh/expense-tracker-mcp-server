@@ -5,6 +5,8 @@ from fastmcp import FastMCP
 
 DB_PATH = Path(__file__).resolve().parent / "expense.db"
 
+CATEGORIES_PATH = Path(__file__).resolve().parent / "categories.json"
+
 # Create a FastMCP server instance
 mcp = FastMCP("ExpenseTracker")
 
@@ -57,13 +59,15 @@ def list_expenses(start_date, end_date):
 
 @mcp.tool()
 def summarize(start_date, end_date, category=None):
-    """Summarize expenses by category within an inclusive date range."""
+    '''Summarize expenses by category within an inclusive date range.'''
     with sqlite3.connect(DB_PATH) as c:
-        query = """
+        query = (
+            """
             SELECT category, SUM(amount) AS total_amount
             FROM expenses
             WHERE date BETWEEN ? AND ?
             """
+        )
         params = [start_date, end_date]
 
         if category:
@@ -73,8 +77,15 @@ def summarize(start_date, end_date, category=None):
         query += " GROUP BY category ORDER BY category ASC"
 
         cur = c.execute(query, params)
-        cols = [d[0] for d in cur.description]
-        return [dict(zip(cols, r)) for r in cur.fetchall()]
+        cols=[d[0] for d in cur.description]
+        return [dict(zip(cols,r)) for r in cur.fetchall()]
+
+
+@mcp.resource("expense://categories", mime_type="application/json")
+def categories():
+    # Read fresh each time so you can edit the file without restarting
+    with open(CATEGORIES_PATH, "r", encoding="utf-8") as f:
+        return f.read()
 
 
 if __name__ == "__main__":
