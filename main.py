@@ -1,3 +1,4 @@
+import os
 import tempfile
 from pathlib import Path
 
@@ -5,8 +6,12 @@ import aiosqlite
 from fastmcp import FastMCP
 
 # Use temporary directory which should be writable
-TEMP_DIR = Path(tempfile.gettempdir())
-DB_PATH = TEMP_DIR / "expense.db"
+DB_PATH = Path(
+    os.getenv(
+        "DB_PATH",
+        Path(tempfile.gettempdir()) / "expense.db"
+    )
+)
 CATEGORIES_PATH = Path(__file__).resolve().parent / "categories.json"
 
 print(f"Database path: {DB_PATH}")
@@ -125,5 +130,6 @@ def categories():
 # Start the server
 if __name__ == "__main__":
     # mcp.run()  # local mcp server transport: stdio
-    mcp.run(transport="http", host="0.0.0.0", port=8000)
+    port = int(os.getenv("PORT", "8000"))
+    mcp.run(transport="http", host="0.0.0.0", port=port)
 # Run the server
