@@ -9,6 +9,7 @@ from typing import Any
 
 import aiosqlite
 from fastmcp import FastMCP
+from fastmcp.server.dependencies import get_http_headers
 
 DB_TIMEOUT = 10
 
@@ -30,6 +31,7 @@ def init_db() -> None:  # Keep as sync for initialization
             c.execute("""
                 CREATE TABLE IF NOT EXISTS expenses(
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL,
                     date TEXT NOT NULL,
                     amount REAL NOT NULL,
                     category TEXT NOT NULL,
@@ -55,10 +57,20 @@ async def add_expense(
 ) -> dict[str, str | int | None]:
     """Add a new expense entry to the database."""
     try:
+        user_id: str | None = get_http_headers().get("horizon-actor")
+        if user_id is None:
+            return {"status": "error", "message": "User is not authenticated"}
         async with aiosqlite.connect(DB_PATH, timeout=DB_TIMEOUT) as c:
             cur = await c.execute(
-                "INSERT INTO expenses(date, amount, category, subcategory, note) VALUES (?,?,?,?,?)",
-                (expense_date.isoformat(), float(amount), category, subcategory, note),
+                "INSERT INTO expenses(user_id, date, amount, category, subcategory, note) VALUES (?,?,?,?,?,?)",
+                (
+                    user_id,
+                    expense_date.isoformat(),
+                    float(amount),
+                    category,
+                    subcategory,
+                    note,
+                ),
             )
             await c.commit()
             return {
@@ -81,15 +93,19 @@ async def list_expenses(
 ) -> list[dict[str, Any]] | dict[str, str]:
     """List expense entries within an inclusive date range."""
     try:
+        user_id: str | None = get_http_headers().get("horizon-actor")
+        if user_id is None:
+            return {"status": "error", "message": "User is not authenticated"}
         async with aiosqlite.connect(DB_PATH, timeout=DB_TIMEOUT) as c:
             cur = await c.execute(
                 """
                 SELECT id, date, amount, category, subcategory, note
                 FROM expenses
                 WHERE date BETWEEN ? AND ?
+                AND user_id = ?
                 ORDER BY date DESC, id DESC
                 """,
-                (start_date.isoformat(), end_date.isoformat()),
+                (start_date.isoformat(), end_date.isoformat(), user_id),
             )
             cols = [d[0] for d in cur.description]
             return [dict(zip(cols, r)) for r in await cur.fetchall()]
@@ -103,13 +119,21 @@ async def summarize(
 ) -> list[dict[str, Any]] | dict[str, str]:
     """Summarize expenses by category within an inclusive date range."""
     try:
+        user_id: str | None = get_http_headers().get("horizon-actor")
+        if user_id is None:
+            return {"status": "error", "message": "User is not authenticated"}
         async with aiosqlite.connect(DB_PATH, timeout=DB_TIMEOUT) as c:
             query = """
                 SELECT category, SUM(amount) AS total_amount, COUNT(*) as count
                 FROM expenses
                 WHERE date BETWEEN ? AND ?
+                AND user_id = ?
             """
-            params: list[date | str] = [start_date.isoformat(), end_date.isoformat()]
+            params: list[str] = [
+                start_date.isoformat(),
+                end_date.isoformat(),
+                user_id,
+            ]
 
             if category:
                 query += " AND category = ?"
