@@ -10,6 +10,8 @@ from typing import Any
 import aiosqlite
 from fastmcp import FastMCP
 
+DB_TIMEOUT = 10
+
 # Use temporary directory which should be writable
 DB_PATH = Path(os.getenv("DB_PATH", Path(tempfile.gettempdir()) / "expense.db"))
 CATEGORIES_PATH = Path(__file__).resolve().parent / "categories.json"
@@ -23,7 +25,7 @@ def init_db() -> None:  # Keep as sync for initialization
     try:
         # Use synchronous sqlite3 just for initialization
 
-        with sqlite3.connect(DB_PATH) as c:
+        with sqlite3.connect(DB_PATH, timeout=DB_TIMEOUT) as c:
             c.execute("PRAGMA journal_mode=WAL")  # Better for concurrent access
             c.execute("""
                 CREATE TABLE IF NOT EXISTS expenses(
@@ -53,7 +55,7 @@ async def add_expense(
 ) -> dict[str, str | int | None]:
     """Add a new expense entry to the database."""
     try:
-        async with aiosqlite.connect(DB_PATH, timeout=10) as c:
+        async with aiosqlite.connect(DB_PATH, timeout=DB_TIMEOUT) as c:
             cur = await c.execute(
                 "INSERT INTO expenses(date, amount, category, subcategory, note) VALUES (?,?,?,?,?)",
                 (expense_date.isoformat(), float(amount), category, subcategory, note),
@@ -79,7 +81,7 @@ async def list_expenses(
 ) -> list[dict[str, Any]] | dict[str, str]:
     """List expense entries within an inclusive date range."""
     try:
-        async with aiosqlite.connect(DB_PATH) as c:
+        async with aiosqlite.connect(DB_PATH, timeout=DB_TIMEOUT) as c:
             cur = await c.execute(
                 """
                 SELECT id, date, amount, category, subcategory, note
@@ -101,7 +103,7 @@ async def summarize(
 ) -> list[dict[str, Any]] | dict[str, str]:
     """Summarize expenses by category within an inclusive date range."""
     try:
-        async with aiosqlite.connect(DB_PATH) as c:
+        async with aiosqlite.connect(DB_PATH, timeout=DB_TIMEOUT) as c:
             query = """
                 SELECT category, SUM(amount) AS total_amount, COUNT(*) as count
                 FROM expenses
