@@ -114,6 +114,62 @@ async def list_expenses(
 
 
 @mcp.tool()
+async def update_expense(
+    id: int,
+    expense_date: date | None = None,
+    amount: Decimal | None = None,
+    category: str | None = None,
+    subcategory: str | None = None,
+    note: str | None = None,
+):
+    """Edit an expense."""
+    try:
+        user_id: str | None = get_http_headers().get("horizon-actor")
+        if user_id is None:
+            return {"status": "error", "message": "User is not authenticated"}
+
+        updates: dict[str, str | float] = {}
+        if expense_date is not None:
+            updates["date"] = expense_date.isoformat()
+        if amount is not None:
+            updates["amount"] = float(amount)
+        if category is not None:
+            updates["category"] = category
+        if subcategory is not None:
+            updates["subcategory"] = subcategory
+        if note is not None:
+            updates["note"] = note
+
+        if not updates:
+            return {"status": "error", "message": "No fields provided to update."}
+
+        async with aiosqlite.connect(DB_PATH, timeout=DB_TIMEOUT) as c:
+            columns = ", ".join(f"{key} = ?" for key in updates)
+            params: list[str | float] = list(updates.values())
+            params.extend([id, user_id])
+
+            cur = await c.execute(
+                f"""
+                UPDATE expenses
+                SET {columns}
+                WHERE id = ? AND user_id = ?
+                """,
+                params,
+            )
+            await c.commit()
+            if cur.rowcount == 1:
+                return {
+                    "status": "success",
+                    "message": f"Updated expense with id {id} successfully",
+                }
+
+        return {"status": "error", "message": "Expense id not found or update failed."}
+
+    except Exception as e:
+        return {"status": "error", "message": f"Error updating expense: {e!s}"}
+
+
+@mcp.tool()
 async def summarize(
     start_date: date, end_date: date, category: str | None = None
 ) -> list[dict[str, Any]] | dict[str, str]:
