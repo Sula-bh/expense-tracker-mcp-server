@@ -89,5 +89,6 @@ def categories():
 
 
 if __name__ == "__main__":
-    mcp.run()
+    # mcp.run()  # local mcp server transport: stdio
+    mcp.run(transport="http", host="0.0.0.0", port=8000)
 # Run the server
