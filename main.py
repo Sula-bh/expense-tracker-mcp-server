@@ -170,6 +170,35 @@ async def update_expense(
 
 
 @mcp.tool()
+async def delete_expense(id: int):
+    """Delete an expense."""
+    try:
+        user_id: str | None = get_http_headers().get("horizon-actor")
+        if user_id is None:
+            return {"status": "error", "message": "User is not authenticated"}
+
+        async with aiosqlite.connect(DB_PATH, timeout=DB_TIMEOUT) as c:
+            cur = await c.execute(
+                """
+                DELETE FROM expenses
+                WHERE id = ? AND user_id = ?
+                """,
+                (id, user_id)
+            )
+            await c.commit()
+            if cur.rowcount == 1:
+                return {
+                    "status": "success",
+                    "message": f"Deleted expense with id {id} successfully",
+                }
+
+        return {"status": "error", "message": "Expense id not found or deletion failed."}
+
+    except Exception as e:
+        return {"status": "error", "message": f"Error deleting expense: {e!s}"}
+
+
+@mcp.tool()
 async def summarize(
     start_date: date, end_date: date, category: str | None = None
 ) -> list[dict[str, Any]] | dict[str, str]:
