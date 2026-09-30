@@ -88,6 +88,33 @@ async def add_expense(
 
 
 @mcp.tool()
+async def get_expense(id: int) -> dict[str, str | Any]:
+    """Fetch an expense based on its id."""
+    try:
+        user_id: str | None = get_http_headers().get("horizon-actor")
+        if user_id is None:
+            return {"status": "error", "message": "User is not authenticated"}
+
+        async with aiosqlite.connect(DB_PATH, timeout=DB_TIMEOUT) as c:
+            cur = await c.execute(
+                """
+                SELECT id, date, amount, category, subcategory, note
+                FROM expenses
+                WHERE user_id = ? AND id = ?
+                """,
+                (user_id, id),
+            )
+            expense_row = await cur.fetchone()
+            cols = [d[0] for d in cur.description]
+            if expense_row:
+                return dict(zip(cols, expense_row))
+            
+            return {"status": "error", "message": f"Expense id {id} not found."}
+    except Exception as e:
+        return {"status": "error", "message": f"Error finding expense: {e!s}"}
+
+
+@mcp.tool()
 async def list_expenses(
     start_date: date | None = None,
     end_date: date | None = None,
