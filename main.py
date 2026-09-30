@@ -89,24 +89,59 @@ async def add_expense(
 
 @mcp.tool()
 async def list_expenses(
-    start_date: date, end_date: date
+    start_date: date | None = None,
+    end_date: date | None = None,
+    category: str | None = None,
+    subcategory: str | None = None,
+    note: str | None = None,
+    min_amount: Decimal | None = None,
+    max_amount: Decimal | None = None,
 ) -> list[dict[str, Any]] | dict[str, str]:
-    """List expense entries within an inclusive date range."""
+    """Search expenses based on filters like date range, amount range, category, subcategory, note."""
     try:
         user_id: str | None = get_http_headers().get("horizon-actor")
         if user_id is None:
             return {"status": "error", "message": "User is not authenticated"}
         async with aiosqlite.connect(DB_PATH, timeout=DB_TIMEOUT) as c:
-            cur = await c.execute(
-                """
+            query = """
                 SELECT id, date, amount, category, subcategory, note
                 FROM expenses
-                WHERE date BETWEEN ? AND ?
-                AND user_id = ?
-                ORDER BY date DESC, id DESC
-                """,
-                (start_date.isoformat(), end_date.isoformat(), user_id),
-            )
+                WHERE user_id = ? 
+            """
+            params: list[str | float] = [user_id]
+
+            if start_date:
+                query += " AND date >= ?"
+                params.append(start_date.isoformat())
+
+            if end_date:
+                query += " AND date <= ?"
+                params.append(end_date.isoformat())
+
+            if category:
+                query += " AND category = ?"
+                params.append(category)
+
+            if subcategory:
+                query += " AND subcategory = ?"
+                params.append(subcategory)
+
+            if note:
+                query += " AND note LIKE ?"
+                params.append(f"%{note}%")
+
+            if min_amount is not None:
+                query += " AND amount >= ?"
+                params.append(float(min_amount))
+
+            if max_amount is not None:
+                query += " AND amount <= ?"
+                params.append(float(max_amount))
+
+            query += " ORDER BY date DESC, id DESC"
+
+            cur = await c.execute(query, params)
+
             cols = [d[0] for d in cur.description]
             return [dict(zip(cols, r)) for r in await cur.fetchall()]
     except Exception as e:
