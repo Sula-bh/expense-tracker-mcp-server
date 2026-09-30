@@ -121,8 +121,8 @@ async def update_expense(
     category: str | None = None,
     subcategory: str | None = None,
     note: str | None = None,
-):
-    """Edit an expense."""
+) -> dict[str, str]:
+    """Edit an expense based on a provided expense id."""
     try:
         user_id: str | None = get_http_headers().get("horizon-actor")
         if user_id is None:
@@ -170,8 +170,8 @@ async def update_expense(
 
 
 @mcp.tool()
-async def delete_expense(id: int):
-    """Delete an expense."""
+async def delete_expense(id: int) -> dict[str, str]:
+    """Delete an expense based on a provided expense id."""
     try:
         user_id: str | None = get_http_headers().get("horizon-actor")
         if user_id is None:
@@ -183,7 +183,7 @@ async def delete_expense(id: int):
                 DELETE FROM expenses
                 WHERE id = ? AND user_id = ?
                 """,
-                (id, user_id)
+                (id, user_id),
             )
             await c.commit()
             if cur.rowcount == 1:
@@ -192,7 +192,10 @@ async def delete_expense(id: int):
                     "message": f"Deleted expense with id {id} successfully",
                 }
 
-        return {"status": "error", "message": "Expense id not found or deletion failed."}
+        return {
+            "status": "error",
+            "message": "Expense id not found or deletion failed.",
+        }
 
     except Exception as e:
         return {"status": "error", "message": f"Error deleting expense: {e!s}"}
