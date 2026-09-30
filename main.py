@@ -207,7 +207,7 @@ async def delete_expenses(
     end_date: date | None = None,
     category: str | None = None,
     subcategory: str | None = None,
-):
+) -> dict[str, str]:
     """Permanently delete the authenticated user's expenses matching the provided filters. At least one filter is required.
     If using a date filter, provide both start_date and end_date."""
     try:
