@@ -202,6 +202,68 @@ async def delete_expense(id: int) -> dict[str, str]:
 
 
 @mcp.tool()
+async def delete_expenses(
+    start_date: date | None = None,
+    end_date: date | None = None,
+    category: str | None = None,
+    subcategory: str | None = None,
+):
+    """Permanently delete the authenticated user's expenses matching the provided filters. At least one filter is required.
+    If using a date filter, provide both start_date and end_date."""
+    try:
+        user_id: str | None = get_http_headers().get("horizon-actor")
+        if user_id is None:
+            return {"status": "error", "message": "User is not authenticated"}
+
+        if (
+            start_date is None
+            and end_date is None
+            and category is None
+            and subcategory is None
+        ):
+            return {
+                "status": "error",
+                "message": "At least one filter is required for bulk deletion.",
+            }
+
+        if (start_date is None) != (end_date is None):
+            return {
+                "status": "error",
+                "message": "Both start_date and end_date are required for a date range.",
+            }
+
+        async with aiosqlite.connect(DB_PATH, timeout=DB_TIMEOUT) as c:
+            query = """
+                DELETE FROM expenses
+                WHERE user_id = ? 
+            """
+            params: list[str] = [user_id]
+
+            if start_date and end_date:
+                query += " AND date BETWEEN ? AND ?"
+                params.extend([start_date.isoformat(), end_date.isoformat()])
+
+            if category:
+                query += " AND category = ?"
+                params.append(category)
+
+            if subcategory:
+                query += " AND subcategory = ?"
+                params.append(subcategory)
+
+            cur = await c.execute(query, params)
+            await c.commit()
+
+            return {
+                "status": "success",
+                "message": f"Deleted {cur.rowcount} expenses successfully",
+            }
+
+    except Exception as e:
+        return {"status": "error", "message": f"Error deleting expenses: {e!s}"}
+
+
+@mcp.tool()
 async def summarize(
     start_date: date, end_date: date, category: str | None = None
 ) -> list[dict[str, Any]] | dict[str, str]:
