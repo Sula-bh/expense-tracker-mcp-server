@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import aiosqlite
-from fastmcp import Context, FastMCP
+from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_http_headers
 
 DB_TIMEOUT = 10
@@ -232,32 +232,12 @@ async def update_expense(
 
 
 @mcp.tool()
-async def delete_expense(id: int, context: Context) -> dict[str, str]:
+async def delete_expense(id: int) -> dict[str, str]:
     """Delete an expense based on a provided expense id."""
     try:
         user_id: str | None = get_http_headers().get("horizon-actor")
         if user_id is None:
             return {"status": "error", "message": "User is not authenticated"}
-
-        async with aiosqlite.connect(DB_PATH, timeout=DB_TIMEOUT) as c:
-            cur = await c.execute(
-                """
-                SELECT id, date, amount, category
-                FROM expenses
-                WHERE id = ? AND user_id = ?
-                """,
-                (id, user_id),
-            )
-            expense_row = await cur.fetchone()
-            if expense_row is None:
-                return {"status": "error", "message": f"Expense id {id} not found."}
-
-        confirmation = await context.elicit(
-            f"Are you sure you want to permanently delete expense {id}: {expense_row[3]} expense of {expense_row[2]} on {expense_row[1]}?",
-            response_type=bool,
-        )
-        if confirmation.action != "accept" or confirmation.data is not True:
-            return {"status": "error", "message": "Expense deletion cancelled."}
 
         async with aiosqlite.connect(DB_PATH, timeout=DB_TIMEOUT) as c:
             cur = await c.execute(
